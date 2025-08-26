@@ -1,0 +1,2 @@
+{"key": "foo", "value": "message1", "partition": 2}
+{"key": "foo", "value": "message5", "partition": 2}
