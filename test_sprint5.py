@@ -27,7 +27,7 @@ Environment variables:
 import os, time, json, threading, requests
 from utils.metrics import Metrics
 from utils.load_generator import HttpLoadGenerator
-
+from utils.fault_injector import FaultInjector
 HERE = os.path.dirname(__file__)
 METADATA = os.path.join(HERE, "broker", "metadata.json")
 
@@ -117,7 +117,8 @@ def main():
             print(f"  {url}/health -> {h.status_code}")
         except Exception as e:
             print(f"  {url} not reachable: {e}")
-
+    injector = FaultInjector([8000, 8001], min_interval=5, max_interval=15)
+    injector.start()
     # Start consumer thread
     stop_evt = threading.Event()
     t_cons = threading.Thread(target=consumer_worker, args=(stop_evt,), daemon=True)
@@ -148,8 +149,8 @@ def main():
           f"e2e_avg={None if s['consume']['latency']['avg'] is None else round(s['consume']['latency']['avg']*1000,1)} ms "
           f"p95={None if s['consume']['latency']['p95'] is None else round(s['consume']['latency']['p95']*1000,1)} ms")
 
-    print("\nTip: To test fault tolerance, kill the leader broker during the run and restart it. "
-          "Errors will spike and consume throughput will dip; once back, metrics should recover.")
-
+    print("\nTip: FaultInjector randomly killed/restarted brokers during the run.")
+    print("Check consume latency/throughput dips during faults, then recovery after restart.")
+    injector.stop()
 if __name__ == "__main__":
     main()
