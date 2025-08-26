@@ -1,34 +1,19 @@
-import random
+
 import time
-import threading
 
-class FaultInjector:
+class ManualFaultInjector:
     """
-    Simulates random faults in the system such as network delays,
-    service crashes, or exceptions.
+    Manual fault injector for local testing without Docker.
+    Prints prompts telling you when to stop/start a broker.
+    The benchmark measures outage/recovery durations around those actions.
     """
+    def __init__(self, pause_at_sec=5, resume_at_sec=15):
+        self.pause_at_sec = pause_at_sec
+        self.resume_at_sec = resume_at_sec
 
-    def __init__(self, fault_rate=0.1, delay_range=(0.1, 1.0)):
-        self.fault_rate = fault_rate
-        self.delay_range = delay_range
-
-    def maybe_inject_delay(self):
-        """Randomly injects a delay with probability = fault_rate."""
-        if random.random() < self.fault_rate:
-            delay = random.uniform(*self.delay_range)
-            time.sleep(delay)
-            return delay
-        return 0
-
-    def maybe_raise_exception(self):
-        """Randomly raises an exception with probability = fault_rate."""
-        if random.random() < self.fault_rate:
-            raise RuntimeError("Injected fault: simulated service crash")
-
-    def wrap(self, func):
-        """Decorator to wrap functions with fault injection."""
-        def wrapped(*args, **kwargs):
-            self.maybe_inject_delay()
-            self.maybe_raise_exception()
-            return func(*args, **kwargs)
-        return wrapped
+    def instructions(self):
+        return (
+            f"At T+{self.pause_at_sec}s: stop the leader broker (Ctrl+C the terminal).\n"
+            f"At T+{self.resume_at_sec}s: start it again.\n"
+            "The test continues regardless; metrics will reflect the outage."
+        )

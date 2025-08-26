@@ -1,6 +1,9 @@
+
 from fastapi import FastAPI, HTTPException, Request
 import json, os, time, hashlib
 from typing import Dict, List
+import requests
+from threading import Lock
 
 app = FastAPI()
 
@@ -8,97 +11,172 @@ app = FastAPI()
 # Configuration
 # -------------------------
 NUM_PARTITIONS = 3
-port = int(os.environ["BROKER_PORT"])  # Set BROKER_PORT environment variable
-LOG_DIR = f"logs_{port}"
+# Require BROKER_PORT
+try:
+    PORT = int(os.environ["BROKER_PORT"])
+except KeyError:
+    raise RuntimeError("BROKER_PORT env var must be set (e.g., BROKER_PORT=8000)")
+BASE_URL = f"http://localhost:{PORT}"
+
+HERE = os.path.dirname(__file__)
+METADATA_PATH = os.path.join(HERE, "metadata.json")
+
+LOG_DIR = f"logs_{PORT}"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # -------------------------
-# In-memory state
+# State
 # -------------------------
-# Partition logs: in-memory list + backing file
+# In-memory logs per partition
 partitions: List[List[Dict]] = [[] for _ in range(NUM_PARTITIONS)]
+# Consumer group offsets: {group_id: {partition: offset}}
+consumer_offsets: Dict[str, Dict[int, int]] = {}
+# Locks per partition for append/replicate safety
+locks = [Lock() for _ in range(NUM_PARTITIONS)]
 
-# Load from disk if existing
+# -------------------------
+# Helpers
+# -------------------------
+def load_metadata():
+    with open(METADATA_PATH, "r") as f:
+        return json.load(f)
+
+def is_leader(partition_id: int) -> bool:
+    md = load_metadata()
+    leader_url = md["leaders"][str(partition_id)]
+    return leader_url == BASE_URL
+
+def followers_for(partition_id: int):
+    md = load_metadata()
+    members = md["partitions"][str(partition_id)]
+    # keep order; exclude self
+    return [u for u in members if u != BASE_URL]
+
+def part_file(pid: int) -> str:
+    return os.path.join(LOG_DIR, f"partition_{pid}.jsonl")
+
+# Load existing logs on startup
 for pid in range(NUM_PARTITIONS):
-    path = os.path.join(LOG_DIR, f"partition_{pid}.jsonl")
+    path = part_file(pid)
     if os.path.exists(path):
         with open(path, "r") as f:
             for line in f:
-                partitions[pid].append(json.loads(line.strip()))
+                line = line.strip()
+                if line:
+                    try:
+                        partitions[pid].append(json.loads(line))
+                    except Exception:
+                        # skip corrupt line
+                        pass
 
-# Consumer offsets: {group_id: {partition: offset}}
-consumer_offsets: Dict[str, Dict[int, int]] = {}
-
-# -------------------------
-# Helper functions
-# -------------------------
 def get_partition(key: str) -> int:
-    """Hash key to partition; fallback to round-robin if key is None"""
     if key is None:
+        # round-robin
         get_partition.counter = (get_partition.counter + 1) % NUM_PARTITIONS
         return get_partition.counter
     h = hashlib.sha256(key.encode()).hexdigest()
     return int(h, 16) % NUM_PARTITIONS
 get_partition.counter = -1
 
-def append_to_partition(partition_id: int, msg: Dict):
-    """Append message to memory + disk"""
-    partitions[partition_id].append(msg)
-    path = os.path.join(LOG_DIR, f"partition_{partition_id}.jsonl")
-    with open(path, "a") as f:
-        f.write(json.dumps(msg) + "\n")
+def append_message(pid: int, msg: Dict):
+    """Append to in-memory and disk (idempotency not enforced)."""
+    with locks[pid]:
+        partitions[pid].append(msg)
+        with open(part_file(pid), "a") as f:
+            f.write(json.dumps(msg) + "\n")
+        return len(partitions[pid]) - 1  # offset
 
 # -------------------------
-# Endpoints
+# API
 # -------------------------
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "port": PORT}
 
 @app.post("/publish")
 async def publish(request: Request):
-    msg = await request.json()
-    key = msg.get("key")
-    partition_id = get_partition(key)
-    msg["timestamp"] = time.time()
-    msg["partition"] = partition_id
+    """
+    Producer entry point (should be called on leader).
+    Chooses partition by key if not provided, appends locally,
+    and replicates to followers.
+    """
+    body = await request.json()
+    key = body.get("key")
+    value = body.get("value")
+    # Client can optionally provide partition; otherwise compute from key
+    pid = body.get("partition")
+    if pid is None:
+        pid = get_partition(key)
+    if pid < 0 or pid >= NUM_PARTITIONS:
+        raise HTTPException(status_code=400, detail="invalid partition")
 
-    append_to_partition(partition_id, msg)
-    offset = len(partitions[partition_id]) - 1
-    return {"status": "ok", "partition": partition_id, "offset": offset}
+    # Enrich
+    msg = {
+        "key": key,
+        "value": value,
+        "client_ts": body.get("client_ts"),  # may be None
+        "timestamp": time.time(),            # broker receive time
+        "partition": pid
+    }
 
-@app.get("/consume")
-async def consume(partition: int, offset: int = 0):
-    if partition < 0 or partition >= NUM_PARTITIONS:
-        raise HTTPException(status_code=400, detail="Invalid partition")
-    messages = partitions[partition][offset:]
-    next_offset = len(partitions[partition])
-    return {"messages": messages, "next_offset": next_offset}
+    # Must be leader to accept publish (clients should route, but validate)
+    if not is_leader(pid):
+        raise HTTPException(status_code=409, detail="not leader for partition")
+
+    # Append locally
+    offset = append_message(pid, msg)
+
+    # Replicate to followers (best-effort)
+    for follower_url in followers_for(pid):
+        try:
+            requests.post(f"{follower_url}/replicate", json=msg, timeout=1.5)
+        except requests.exceptions.RequestException:
+            # follower may be down; replication lag is expected
+            pass
+
+    return {"status": "ok", "partition": pid, "offset": offset}
 
 @app.post("/replicate")
 async def replicate(request: Request):
-    """Follower receives replicated message from leader"""
+    """
+    Follower append path. Leaders also accept it (idempotent ignoring duplicates is not implemented here).
+    """
     msg = await request.json()
-    partition_id = msg["partition"]
-    append_to_partition(partition_id, msg)
-    return {"status": "ok"}
+    pid = int(msg["partition"])
+    if pid < 0 or pid >= NUM_PARTITIONS:
+        raise HTTPException(status_code=400, detail="invalid partition")
+    offset = append_message(pid, msg)
+    return {"status": "ok", "offset": offset}
 
-# -------------------------
-# Consumer group endpoints
-# -------------------------
+@app.get("/consume")
+def consume(partition: int, offset: int = 0):
+    if partition < 0 or partition >= NUM_PARTITIONS:
+        raise HTTPException(status_code=400, detail="invalid partition")
+    with locks[partition]:
+        msgs = partitions[partition][offset:]
+        next_off = len(partitions[partition])
+    return {"messages": msgs, "next_offset": next_off}
+
 @app.get("/offset")
 def get_offset(group_id: str, partition: int):
-    """Get current offset for a consumer group"""
-    offset = consumer_offsets.get(group_id, {}).get(partition, 0)
-    return {"offset": offset}
+    off = consumer_offsets.get(group_id, {}).get(partition, 0)
+    return {"offset": off}
 
 @app.post("/commit")
-def commit_offset(request: Request):
-    """Commit offset for a consumer group"""
-    payload = request.json() if hasattr(request, "json") else {}
-    if not payload:
-        raise HTTPException(status_code=400, detail="Missing payload")
-    group_id = payload.get("group_id")
-    partition = payload.get("partition")
-    offset = payload.get("offset")
+async def commit_offset(request: Request):
+    data = await request.json()
+    group_id = data.get("group_id")
+    partition = data.get("partition")
+    offset = data.get("offset")
     if group_id is None or partition is None or offset is None:
         raise HTTPException(status_code=400, detail="Missing required fields")
-    consumer_offsets.setdefault(group_id, {})[partition] = offset
+    consumer_offsets.setdefault(group_id, {})[int(partition)] = int(offset)
     return {"status": "ok"}
+
+@app.get("/loglen")
+def log_length(partition: int):
+    if partition < 0 or partition >= NUM_PARTITIONS:
+        raise HTTPException(status_code=400, detail="invalid partition")
+    return {"length": len(partitions[partition])}
+

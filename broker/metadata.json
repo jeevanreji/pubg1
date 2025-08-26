@@ -1,8 +1,17 @@
 {
   "partitions": {
-    "0": ["http://localhost:8000", "http://localhost:8001"],
-    "1": ["http://localhost:8000", "http://localhost:8001"],
-    "2": ["http://localhost:8001", "http://localhost:8000"]
+    "0": [
+      "http://localhost:8000",
+      "http://localhost:8001"
+    ],
+    "1": [
+      "http://localhost:8000",
+      "http://localhost:8001"
+    ],
+    "2": [
+      "http://localhost:8001",
+      "http://localhost:8000"
+    ]
   },
   "leaders": {
     "0": "http://localhost:8000",
