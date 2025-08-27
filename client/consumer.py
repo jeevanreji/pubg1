@@ -1,14 +1,24 @@
 import requests
 import sys
 import time
-import json
 
-METADATA_FILE = "broker/metadata.json"
+# List of brokers to bootstrap from
+BOOTSTRAP_BROKERS = [
+    "http://localhost:8000",
+    "http://localhost:8001",
+    "http://localhost:8002",
+]
 
-def load_metadata():
-    """Reload the broker metadata each poll"""
-    with open(METADATA_FILE, "r") as f:
-        return json.load(f)
+def get_metadata():
+    """Fetch cluster metadata from any available broker"""
+    for broker in BOOTSTRAP_BROKERS:
+        try:
+            resp = requests.get(f"{broker}/metadata", timeout=2)
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException:
+            print(f"[Metadata] Broker {broker} unreachable, trying next...")
+    raise RuntimeError("All brokers unreachable for metadata")
 
 def get_leader(partition: int, metadata: dict) -> str:
     """Return the current leader URL for a partition"""
@@ -47,13 +57,13 @@ def consume(partition: int, group_id: str, poll_interval: float = 2.0):
     """Continuously consume messages from a partition and commit offsets"""
     offset = 0
     while True:
-        metadata = load_metadata()
-        broker_url = get_leader(partition, metadata)
-
-        if offset == 0:
-            offset = get_group_offset(broker_url, group_id, partition)
-
         try:
+            metadata = get_metadata()
+            broker_url = get_leader(partition, metadata)
+
+            if offset == 0:
+                offset = get_group_offset(broker_url, group_id, partition)
+
             resp = requests.get(
                 f"{broker_url}/consume",
                 params={"partition": partition, "offset": offset},
@@ -69,8 +79,8 @@ def consume(partition: int, group_id: str, poll_interval: float = 2.0):
             if messages:
                 commit_group_offset(broker_url, group_id, partition, offset)
 
-        except requests.exceptions.RequestException:
-            print(f"[Partition {partition}] Leader unreachable at {broker_url}, retrying...")
+        except Exception as e:
+            print(f"[Partition {partition}] Error: {e}. Retrying...")
 
         time.sleep(poll_interval)
 
