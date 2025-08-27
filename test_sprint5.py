@@ -94,7 +94,7 @@ def main():
 
     # Fault injector: schedule explicit leader + follower crashes
     ports = [int(u.split(":")[-1]) for u in members]
-    injector = FaultInjector([8000, 8001])
+    injector = FaultInjector([8000, 8001, 8002, 8003])
 
     def fault_schedule():
         time.sleep(10)
@@ -104,6 +104,15 @@ def main():
         time.sleep(10)
         print("[FaultSchedule] Killing follower broker 8001")
         injector.kill_and_restart(8001, downtime=5)
+
+        time.sleep(10)
+        print("[FaultSchedule] Killing follower broker 8002")
+        injector.kill_and_restart(8002, downtime=5)
+
+        time.sleep(10)
+        print("[FaultSchedule] Killing follower broker 8003")
+        injector.kill_and_restart(8003, downtime=5)
+
 
     threading.Thread(target=fault_schedule, daemon=True).start()
 
