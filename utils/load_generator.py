@@ -1,4 +1,8 @@
 
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 import time, requests, json, threading, random
 from typing import Optional
 
@@ -51,7 +55,6 @@ class HttpLoadGenerator:
         interval = 1.0 / self.target_rps if self.target_rps > 0 else 0.0
         while time.time() < deadline and self.running:
             dt = self.send_once()
-            # sleep the remainder of the interval (if any)
             if interval > 0:
                 to_sleep = max(0.0, interval)
                 time.sleep(to_sleep)

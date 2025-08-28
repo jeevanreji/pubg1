@@ -1,3 +1,7 @@
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 """
 Sprint 5 benchmark runner (with auto leader + follower fault injection).
 """
@@ -77,14 +81,13 @@ def consumer_worker(stop_evt: threading.Event):
         time.sleep(0.2)
 
 def main():
-    # Load metadata to know leader/follower members
+
     with open(METADATA, "r") as f:
         md = json.load(f)
     members = md["partitions"][str(PARTITION)]
     leader = md["leaders"][str(PARTITION)]
     print(f"[Sprint5] Testing partition {PARTITION} with members: {members}, leader={leader}")
 
-    # Health checks
     for url in members:
         try:
             h = requests.get(f"{url}/health", timeout=0.8)

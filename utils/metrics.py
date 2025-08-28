@@ -1,11 +1,15 @@
 
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 import threading, statistics, time
 
 class Metrics:
     def __init__(self):
         self.lock = threading.Lock()
-        self.pub_latencies = []     # time to ack publish
-        self.consume_latencies = [] # end-to-end (client_ts -> consume time)
+        self.pub_latencies = []     
+        self.consume_latencies = [] 
         self.pub_errors = 0
         self.consume_errors = 0
         self.pub_count = 0

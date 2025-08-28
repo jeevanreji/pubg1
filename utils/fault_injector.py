@@ -1,9 +1,12 @@
-# utils/fault_injector.py
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 import subprocess
 import time
 import os
 import signal
-import psutil   # pip install psutil
+import psutil   
 
 class FaultInjector:
     """

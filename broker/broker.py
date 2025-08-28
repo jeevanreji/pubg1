@@ -1,4 +1,8 @@
 
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 from fastapi import FastAPI, HTTPException, Request
 import json, os, time, hashlib
 from typing import Dict, List
@@ -7,11 +11,9 @@ from threading import Lock
 
 app = FastAPI()
 
-# -------------------------
-# Configuration
-# -------------------------
+
 NUM_PARTITIONS = 3
-# Require BROKER_PORT
+
 try:
     PORT = int(os.environ["BROKER_PORT"])
 except KeyError:
@@ -27,11 +29,11 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # -------------------------
 # State
 # -------------------------
-# In-memory logs per partition
+
 partitions: List[List[Dict]] = [[] for _ in range(NUM_PARTITIONS)]
-# Consumer group offsets: {group_id: {partition: offset}}
+
 consumer_offsets: Dict[str, Dict[int, int]] = {}
-# Locks per partition for append/replicate safety
+
 locks = [Lock() for _ in range(NUM_PARTITIONS)]
 
 # -------------------------
@@ -49,13 +51,12 @@ def is_leader(partition_id: int) -> bool:
 def followers_for(partition_id: int):
     md = load_metadata()
     members = md["partitions"][str(partition_id)]
-    # keep order; exclude self
+
     return [u for u in members if u != BASE_URL]
 
 def part_file(pid: int) -> str:
     return os.path.join(LOG_DIR, f"partition_{pid}.jsonl")
 
-# Load existing logs on startup
 for pid in range(NUM_PARTITIONS):
     path = part_file(pid)
     if os.path.exists(path):
@@ -66,12 +67,12 @@ for pid in range(NUM_PARTITIONS):
                     try:
                         partitions[pid].append(json.loads(line))
                     except Exception:
-                        # skip corrupt line
+
                         pass
 
 def get_partition(key: str) -> int:
     if key is None:
-        # round-robin
+
         get_partition.counter = (get_partition.counter + 1) % NUM_PARTITIONS
         return get_partition.counter
     h = hashlib.sha256(key.encode()).hexdigest()
@@ -104,35 +105,35 @@ async def publish(request: Request):
     body = await request.json()
     key = body.get("key")
     value = body.get("value")
-    # Client can optionally provide partition; otherwise compute from key
+
     pid = body.get("partition")
     if pid is None:
         pid = get_partition(key)
     if pid < 0 or pid >= NUM_PARTITIONS:
         raise HTTPException(status_code=400, detail="invalid partition")
 
-    # Enrich
+
     msg = {
         "key": key,
         "value": value,
-        "client_ts": body.get("client_ts"),  # may be None
-        "timestamp": time.time(),            # broker receive time
+        "client_ts": body.get("client_ts"),  
+        "timestamp": time.time(),            
         "partition": pid
     }
 
-    # Must be leader to accept publish (clients should route, but validate)
+
     if not is_leader(pid):
         raise HTTPException(status_code=409, detail="not leader for partition")
 
-    # Append locally
+
     offset = append_message(pid, msg)
 
-    # Replicate to followers (best-effort)
+
     for follower_url in followers_for(pid):
         try:
             requests.post(f"{follower_url}/replicate", json=msg, timeout=1.5)
         except requests.exceptions.RequestException:
-            # follower may be down; replication lag is expected
+
             pass
 
     return {"status": "ok", "partition": pid, "offset": offset}

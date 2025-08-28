@@ -1,8 +1,11 @@
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 import requests
 import sys
 import time
 
-# List of brokers to bootstrap from
 BOOTSTRAP_BROKERS = [
     "http://localhost:8000",
     "http://localhost:8001",

@@ -1,3 +1,7 @@
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 import requests, sys, json, hashlib
 
 BROKER_METADATA_FILE = "broker/metadata.json"
@@ -5,16 +9,16 @@ with open(BROKER_METADATA_FILE) as f:
     metadata = json.load(f)
 
 def produce(key: str, value: str):
-    # Determine partition
+
     partition = int(hashlib.sha256(key.encode()).hexdigest(), 16) % 3
     leader_url = metadata["leaders"][str(partition)]
 
-    # Try sending to leader
+
     try:
         resp = requests.post(f"{leader_url}/publish", json={"key": key, "value": value})
         msg = resp.json()
     except requests.exceptions.RequestException:
-        # Leader unreachable → fallback to other brokers
+
         for url in metadata["partitions"][str(partition)]:
             if url == leader_url:
                 continue

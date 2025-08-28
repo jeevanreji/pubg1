@@ -1,3 +1,7 @@
+# -------------------------
+# Author: Jeevan Reji
+# Date: 2024-06-20
+# -------------------------
 """
 Kafka Benchmark Runner (parallel to Sprint 5 kafkalite runner).
 Publishes messages with timestamps, consumes them, and records pub/consume metrics.
