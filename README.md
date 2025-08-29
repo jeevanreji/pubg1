@@ -30,27 +30,8 @@ The goal was **not to recreate Kafka fully**, but to learn and showcase the arch
 ---
 
 ## Architecture (Simplified)  
-```plantuml
-@startuml
-actor Producer
-actor Consumer
-
-rectangle BrokerCluster {
-  rectangle Broker0 as B0
-  rectangle Broker1 as B1
-  rectangle Broker2 as B2
-  rectangle Broker3 as B3
-}
-
-Producer --> B0 : /publish
-B0 --> B1 : /replicate
-B0 --> B2 : /replicate
-B0 --> B3 : /replicate
-
-Consumer --> B1 : /consume
-@enduml
-```
-
+  
+![Architecture](images/image.png) 
 - **Leader** receives writes and replicates to **3 followers**  
 - **Consumers** read from the committed log (after quorum replication)  
 - **Offsets** are tracked per consumer group  
