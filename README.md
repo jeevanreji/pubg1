@@ -1,10 +1,10 @@
-# KafkaLite 
+# PubG1
 *A minimal distributed log system inspired by Apache Kafka*  
 
 ---
 
 ## What is this Project?  
-**KafkaLite is a minimal distributed log system built from scratch** to demonstrate the core ideas behind Apache Kafka.  
+**PubG1 is a minimal distributed log system built from scratch** to demonstrate the core ideas behind Apache Kafka.  
 It implements the following features step by step:  
 
 - Brokers that accept publishes and serve consumers  
@@ -60,11 +60,11 @@ Consumer --> B1 : /consume
 
 ## Running the Scripts
 
-You can **test KafkaLite yourself** using the Python benchmark scripts or compare with a standard Kafka cluster using Docker.
+You can **test PubG1 yourself** using the Python benchmark scripts or compare with a standard Kafka cluster using Docker.
 
 ---
 
-### 1. Test KafkaLite Sprint 5 Benchmark (Python)
+### 1. Test PubG1 Sprint 5 Benchmark (Python)
 
 1. **Start 4 brokers** in separate terminals (ports 8000–8003):
 
@@ -121,7 +121,7 @@ You can **test KafkaLite yourself** using the Python benchmark scripts or compar
 
     What happens:
     - Messages are produced and consumed from the Kafka cluster.
-    - Metrics similar to the KafkaLite Python benchmark are collected.
+    - Metrics similar to the PubG1 Python benchmark are collected.
     - You can adjust script parameters in `kafka_benchmark_runner.py` to match duration, rate, and partitions for comparison.
 
     **Tip:** Both methods allow you to observe throughput, publish latency, end-to-end latency, and fault recovery. The Python benchmark additionally demonstrates dynamic leader election when brokers fail.
@@ -147,9 +147,9 @@ P95 Latency:
 ![Latency P95](images/p95_latency.png)  
 
 ---
-## Kafka vs KafkaLite  
+## Kafka vs PubG1
 
-| Feature | Apache Kafka | KafkaLite |
+| Feature | Apache Kafka | PubG1 |
 |---------|--------------|-----------|
 | Scale | Production-grade, supports thousands of brokers & partitions | Minimal cluster, 4 brokers, educational purposes |
 | Replication | Leader/follower with configurable replication factor | Leader/follower with dynamic leader election |
@@ -159,9 +159,9 @@ P95 Latency:
 | Complexity | Full production setup, requires Zookeeper or KRaft | Minimal, lightweight, easy to run locally |
 | Learning Value | Black-box for many users, high entry barrier | Transparent architecture for understanding Kafka principles, step-by-step implementation |
 
-## Metrics Comparison: Kafka vs KafkaLite  
+## Metrics Comparison: Kafka vs PubG1  
 
-| Metric | Apache Kafka (typical) | KafkaLite (Sprint 5 Benchmarks) |
+| Metric | Apache Kafka (typical) | PubG1 (Sprint 5 Benchmarks) |
 |--------|------------------------|--------------------------------|
 | Throughput | Thousands to millions msgs/sec | ~85 msgs/sec sustained |
 | Publish Latency | 1–5 ms (avg) | 4-6 ms (avg) |
@@ -171,16 +171,16 @@ P95 Latency:
 | Cluster Size | 100s–1000s of brokers | 4 brokers |
 | Stream Processing | High-throughput, distributed (Kafka Streams) | Minimal, windowed aggregation with checkpointing |
 
-> **Note:** KafkaLite is intentionally minimal to demonstrate core Kafka principles in an educational setting. Despite smaller scale, it maintains **correct replication, offset tracking, and fault recovery**, making it ideal for learning and experimentation.
+> **Note:** PubG1 is intentionally minimal to demonstrate core Kafka principles in an educational setting. Despite smaller scale, it maintains **correct replication, offset tracking, and fault recovery**, making it ideal for learning and experimentation.
 
 
-> **Takeaway:** KafkaLite is not trying to replace Kafka, but it distills Kafka’s key concepts into a runnable, educational system, highlighting replication, dynamic leader election, consumer offsets, and fault tolerance in a minimal and understandable form.
+> **Takeaway:** PubG1 is not trying to replace Kafka, but it distills Kafka’s key concepts into a runnable, educational system, highlighting replication, dynamic leader election, consumer offsets, and fault tolerance in a minimal and understandable form.
 
 ---
 
 ## Conclusion  
 
-KafkaLite demonstrates that replication, dynamic leader election, failover, and consumer offset tracking can be implemented in a minimal system.  
+PubG1 demonstrates that replication, dynamic leader election, failover, and consumer offset tracking can be implemented in a minimal system.  
 The benchmarks show that even under fault injection (leader/follower crashes):
 
 - **Throughput** was sustained at expected levels.  
