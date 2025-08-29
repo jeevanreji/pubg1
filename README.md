@@ -15,7 +15,7 @@ It implements the following features step by step:
 - A stream analytics layer (windowed aggregations, checkpointing)  
 - Benchmarking with load generation and fault injection  
 
-The goal was **not to recreate Kafka fully**, but to learn and showcase the architectural principles that make Kafka robust: log‑based messaging, partition leaders, replication, consumer offsets, and fault‑tolerant stream processing.  
+The goal was **not to recreate Kafka fully**, but to learn and showcase the architectural principles that make Kafka robust: log‑based messaging, partition leaders, replication, dynamic leader election in times of failures, consumer offsets, and fault‑tolerant stream processing.  
 
 ---
 
@@ -69,8 +69,11 @@ You can **test KafkaLite yourself** using the Python benchmark scripts or compar
 1. **Start 4 brokers** in separate terminals (ports 8000–8003):
 
     ```
-    export BROKER_PORT=8000
-    python -m broker.run_broker 8000
+    BROKER_PORT=8001 python -m broker.run_broker 8001 8000 8001 8002 8003
+    BROKER_PORT=8000 python -m broker.run_broker 8000 8001 8001 8002 8003
+    BROKER_PORT=8002 python -m broker.run_broker 8002 8000 8001 8002 8003
+    BROKER_PORT=8003 python -m broker.run_broker 8003 8000 8001 8002 8003
+
     ```
 
     Repeat for ports 8001, 8002, 8003.
@@ -78,7 +81,7 @@ You can **test KafkaLite yourself** using the Python benchmark scripts or compar
 2. Run the Sprint 5 benchmark script:
 
     ```
-    PARTITION=0 GROUP_ID=bench DURATION_SEC=40 TARGET_RPS=100 python test_sprint_5.py
+    PARTITION=0 GROUP_ID=bench DURATION_SEC=40 TARGET_RPS=100 python test_sprint_7.py
     ```
 
     What happens:
@@ -96,7 +99,6 @@ You can **test KafkaLite yourself** using the Python benchmark scripts or compar
 1. Start Kafka cluster via Docker Compose:
 
     ```
-    cd kafka
     docker-compose up -d
     ```
 
@@ -114,7 +116,8 @@ You can **test KafkaLite yourself** using the Python benchmark scripts or compar
 3. Run the Kafka benchmark runner:
 
     ```
-    python kafka_benchmark_runner.py
+    PARTITION=0 GROUP_ID=bench DURATION_SEC=40 TARGET_RPS=100 python 
+ kafka_benchmark_runner.py
     ```
 
     What happens:

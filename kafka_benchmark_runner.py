@@ -11,6 +11,7 @@ import os, time, json, threading
 from confluent_kafka import Producer, Consumer, KafkaException
 from utils.metrics import Metrics
 
+# --- Environment variables (same style as Sprint 7 benchmark) ---
 BROKERS = os.environ.get("KAFKA_BROKERS", "localhost:9092")
 TOPIC = os.environ.get("TOPIC", "bench-topic")
 GROUP_ID = os.environ.get("GROUP_ID", "bench")

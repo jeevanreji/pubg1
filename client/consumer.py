@@ -1,10 +1,8 @@
 # -------------------------
-# Author: Jeevan Reji
+# Author: Jeevan Reji (modified)
 # Date: 2025-08-28
 # -------------------------
-import requests
-import sys
-import time
+import requests, sys, time
 
 BOOTSTRAP_BROKERS = [
     "http://localhost:8000",
@@ -13,86 +11,53 @@ BOOTSTRAP_BROKERS = [
 ]
 
 def get_metadata():
-    """Fetch cluster metadata from any available broker"""
-    for broker in BOOTSTRAP_BROKERS:
+    for b in BOOTSTRAP_BROKERS:
         try:
-            resp = requests.get(f"{broker}/metadata", timeout=2)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.RequestException:
-            print(f"[Metadata] Broker {broker} unreachable, trying next...")
-    raise RuntimeError("All brokers unreachable for metadata")
+            r = requests.get(f"{b}/metadata", timeout=1.0)
+            r.raise_for_status()
+            return r.json()
+        except Exception:
+            continue
+    raise RuntimeError("No brokers available to fetch metadata from")
 
-def get_leader(partition: int, metadata: dict) -> str:
-    """Return the current leader URL for a partition"""
-    return metadata["leaders"][str(partition)]
-
-def get_group_offset(broker_url: str, group_id: str, partition: int) -> int:
-    """Fetch starting offset for a consumer group"""
-    try:
-        resp = requests.get(
-            f"{broker_url}/offset",
-            params={"group_id": group_id, "partition": partition},
-            timeout=2
-        )
-        resp.raise_for_status()
-        return resp.json().get("offset", 0)
-    except requests.exceptions.RequestException:
-        print(f"[Partition {partition}] Could not get offset from {broker_url}, starting at 0")
-        return 0
-
-def commit_group_offset(broker_url: str, group_id: str, partition: int, offset: int):
-    """Commit the latest consumed offset for a consumer group"""
-    try:
-        requests.post(
-            f"{broker_url}/commit",
-            json={
-                "group_id": group_id,
-                "partition": partition,
-                "offset": offset
-            },
-            timeout=2
-        )
-    except requests.exceptions.RequestException:
-        print(f"[Partition {partition}] Could not commit offset {offset} to {broker_url}")
-
-def consume(partition: int, group_id: str, poll_interval: float = 2.0):
-    """Continuously consume messages from a partition and commit offsets"""
+def consume(partition: int, group_id: str, poll_interval: float = 0.5):
+    md = get_metadata()
     offset = 0
+    try:
+        # read committed offset if any
+        leader_for_partition = md["leaders"][str(partition)]
+        r = requests.get(f"{leader_for_partition}/offset", params={"group_id": group_id, "partition": partition}, timeout=1.0)
+        if r.ok:
+            offset = int(r.json().get("offset", 0))
+    except Exception:
+        offset = 0
+
+    print(f"Starting consumer for partition {partition} from offset {offset}")
     while True:
         try:
-            metadata = get_metadata()
-            broker_url = get_leader(partition, metadata)
-
-            if offset == 0:
-                offset = get_group_offset(broker_url, group_id, partition)
-
-            resp = requests.get(
-                f"{broker_url}/consume",
-                params={"partition": partition, "offset": offset},
-                timeout=2
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            messages = data.get("messages", [])
-            for m in messages:
-                print(f"[Partition {partition}] offset={offset}: {m}")
-                offset += 1
-
-            if messages:
-                commit_group_offset(broker_url, group_id, partition, offset)
-
+            md = get_metadata()
+            leader = md["leaders"][str(partition)]
+            r = requests.get(f"{leader}/consume", params={"partition": partition, "offset": offset}, timeout=1.0)
+            r.raise_for_status()
+            data = r.json()
+            msgs = data.get("messages", [])
+            next_offset = data.get("next_offset", offset)
+            for m in msgs:
+                print(f"[consumer] got message: {m}")
+            # commit offset
+            try:
+                requests.post(f"{leader}/commit_offset", json={"group_id": group_id, "partition": partition, "offset": next_offset}, timeout=1.0)
+            except Exception:
+                pass
+            offset = next_offset
         except Exception as e:
-            print(f"[Partition {partition}] Error: {e}. Retrying...")
-
+            print(f"[consumer] Error: {e}. Retrying...")
         time.sleep(poll_interval)
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: python consumer.py <partition> <group_id>")
         sys.exit(1)
-
     partition = int(sys.argv[1])
     group_id = sys.argv[2]
-
     consume(partition, group_id)

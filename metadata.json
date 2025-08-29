@@ -1,0 +1,1 @@
+{"partitions": {"0": ["http://localhost:8000"], "1": ["http://localhost:8000"], "2": ["http://localhost:8000"]}, "leaders": {"0": "http://localhost:8000", "1": "http://localhost:8000", "2": "http://localhost:8000"}, "members": ["http://localhost:8000"]}
