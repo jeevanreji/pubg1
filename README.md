@@ -116,8 +116,7 @@ You can **test KafkaLite yourself** using the Python benchmark scripts or compar
 3. Run the Kafka benchmark runner:
 
     ```
-    PARTITION=0 GROUP_ID=bench DURATION_SEC=40 TARGET_RPS=100 python 
- kafka_benchmark_runner.py
+    PARTITION=0 GROUP_ID=bench DURATION_SEC=40 TARGET_RPS=100 python kafka_benchmark_runner.py
     ```
 
     What happens:
