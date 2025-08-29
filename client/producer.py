@@ -28,7 +28,6 @@ def produce(key: str, value: str):
     leader_url = md["leaders"][str(partition)]
 
     payload = {"key": key, "value": value, "partition": partition, "ts": time.time()}
-    # Try leader first
     try:
         r = requests.post(f"{leader_url}/publish", json=payload, timeout=1.0)
         r.raise_for_status()
@@ -37,13 +36,11 @@ def produce(key: str, value: str):
             print("Produced to leader:", leader_url, "offset=", data.get("offset"))
             return True
         if data.get("status") == "redirect":
-            # leader told us which node to send to (rare since we targeted leader)
             leader_url = data.get("leader")
     except Exception:
-        # try other replicas for this partition
         pass
 
-    # try replicas if leader unreachable
+
     for url in md["partitions"][str(partition)]:
         try:
             r = requests.post(f"{url}/publish", json=payload, timeout=1.0)
@@ -54,7 +51,7 @@ def produce(key: str, value: str):
                 return True
             if data.get("status") == "redirect":
                 leader_url = data.get("leader")
-                # try the redirected leader
+
                 continue
         except Exception:
             continue

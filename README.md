@@ -132,20 +132,20 @@ You can **test KafkaLite yourself** using the Python benchmark scripts or compar
 
 ## Results (Sprint 5 Benchmarks)  
 
-- **Throughput:** ~63 msgs/sec sustained  
-- **Publish Latency:** avg ~7–9 ms  
-- **End‑to‑End Latency:** avg ~120 ms, 95% under 200 ms  
+- **Throughput:** ~85 msgs/sec sustained  
+- **Publish Latency:** avg ~4–6 ms  
+- **End‑to‑End Latency:** avg ~100 ms, 95% under 200 ms  
 - **Recovery:** leader/follower failures injected, system recovered gracefully with no data loss  
 
 ### Example Plots  
 Throughput over time:  
-![Throughput](docs/plots/throughput.png)  
+![Throughput](images/throughput.png)  
 
 Average Latency:  
-![Latency](docs/plots/latency.png)  
+![Latency](images/avg_latency.png)  
 
 P95 Latency:  
-![Latency P95](docs/plots/latency_p95.png)  
+![Latency P95](images/p95_latency.png)  
 
 ---
 ## Kafka vs KafkaLite  
@@ -164,9 +164,9 @@ P95 Latency:
 
 | Metric | Apache Kafka (typical) | KafkaLite (Sprint 5 Benchmarks) |
 |--------|------------------------|--------------------------------|
-| Throughput | Thousands to millions msgs/sec | ~63 msgs/sec sustained |
-| Publish Latency | 1–5 ms (avg) | 7–9 ms (avg) |
-| End-to-End Latency | 5–50 ms (avg) | 120 ms (avg), 95% under 200 ms |
+| Throughput | Thousands to millions msgs/sec | ~85 msgs/sec sustained |
+| Publish Latency | 1–5 ms (avg) | 4-6 ms (avg) |
+| End-to-End Latency | 5–50 ms (avg) | 100 ms (avg), 95% under 200 ms |
 | Fault Recovery | Automatic, handles large-scale failures | Demonstrated with leader/follower crashes, recovered gracefully |
 | Data Loss | None in normal operation | None observed in tests |
 | Cluster Size | 100s–1000s of brokers | 4 brokers |

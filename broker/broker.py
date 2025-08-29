@@ -10,18 +10,16 @@ from threading import Lock, Thread
 
 app = FastAPI()
 
-# Number of partitions (kept small for tests)
-NUM_PARTITIONS = int(os.environ.get("NUM_PARTITIONS", 3))
+NUM_PARTITIONS = int(os.environ.get("NUM_PARTITIONS", 4))
 
-# Port and base url for this broker
+
 try:
     PORT = int(os.environ["BROKER_PORT"])
 except KeyError:
     raise RuntimeError("BROKER_PORT env var must be set (e.g., BROKER_PORT=8000)")
 BASE_URL = f"http://localhost:{PORT}"
 
-# Cluster configuration (list of ports). If not provided, use the common 4-node default.
-# This expects an env var BROKER_CLUSTER like "8000,8001,8002,8003"
+
 CLUSTER_PORTS = [int(p) for p in os.environ.get("BROKER_CLUSTER", "8000,8001,8002,8003").split(",") if p.strip()!='']
 CLUSTER_URLS = [f"http://localhost:{p}" for p in CLUSTER_PORTS]
 
@@ -36,7 +34,7 @@ partitions: List[List[Dict]] = [[] for _ in range(NUM_PARTITIONS)]
 locks: List[Lock] = [Lock() for _ in range(NUM_PARTITIONS)]
 consumer_offsets: Dict[str, Dict[int, int]] = {}
 
-# raftos-backed replicated stores (if available)
+# raftos-backed replicated stores 
 raft_available = False
 leaders_store = None
 partitions_store = None
@@ -51,42 +49,39 @@ async def setup_raft():
         return
 
     raft_available = True
-    # configure log path so each broker uses a separate directory
-    # (raftos.configure is typically synchronous)
     try:
         raftos.configure({'log_path': f'./raft_logs_{PORT}'})
     except Exception as e:
         print(f"[broker:{PORT}] raftos.configure() warning: {e}")
 
-    # Build cluster node strings (host:port) from CLUSTER_PORTS env,
-    # excluding self from the cluster_nodes list passed to register()
+ 
     cluster_nodes = [f"127.0.0.1:{p}" for p in CLUSTER_PORTS if p != PORT]
 
-    # Register this node as "host:port" string — raftos expects strings like "127.0.0.1:8000"
+
     try:
         await raftos.register(f"127.0.0.1:{PORT}", cluster=cluster_nodes)
     except Exception as e:
-        # raftos.register may raise if peers not yet available; log and continue.
+
         print(f"[broker:{PORT}] raftos.register() raised: {e}")
 
-    # create replicated dicts for partitions and leaders
+
     try:
         leaders_store = raftos.ReplicatedDict('leaders')
         partitions_store = raftos.ReplicatedDict('partitions')
     except Exception as e:
-        # Some raftos versions might require different usage; fallback to no-raft mode
+
         print(f"[broker:{PORT}] Could not create ReplicatedDicts: {e}")
         raft_available = False
         leaders_store = None
         partitions_store = None
         return
 
-    # populate partitions and leaders deterministically based on cluster membership
+
     replication_factor = min(3, max(1, len(CLUSTER_URLS)))
     for pid in range(NUM_PARTITIONS):
         start = pid % len(CLUSTER_URLS)
         replicas = [CLUSTER_URLS[(start + i) % len(CLUSTER_URLS)] for i in range(replication_factor)]
-        # store in replicated dicts (idempotent if multiple nodes run same code)
+
         try:
             await partitions_store.set(str(pid), replicas)
             await leaders_store.set(str(pid), replicas[0])
@@ -95,10 +90,10 @@ async def setup_raft():
 
     print(f"[broker:{PORT}] raftos setup complete (or attempted). Cluster members: {CLUSTER_URLS}")
 
-# schedule raft setup on application startup
+
 @app.on_event("startup")
 async def _startup_event():
-    # run raft setup in the event loop
+
     await setup_raft()
 
 async def get_metadata() -> Dict:
@@ -118,7 +113,7 @@ async def get_metadata() -> Dict:
                 l = await leaders_store.get(str(pid))
             except Exception:
                 l = None
-            # fallback to deterministic
+
             if not p:
                 start = pid % len(CLUSTER_URLS)
                 p = [CLUSTER_URLS[(start + i) % len(CLUSTER_URLS)] for i in range(min(3, len(CLUSTER_URLS)))]
@@ -145,7 +140,7 @@ def append_message(pid: int, msg: Dict) -> int:
     with locks[pid]:
         partitions[pid].append(msg)
         offset = len(partitions[pid]) - 1
-        # persist
+
         with open(part_file(pid), "a") as f:
             f.write(json.dumps(msg) + "\n")
         return offset
@@ -162,7 +157,7 @@ def _load_logs_from_disk():
                 except Exception:
                     pass
 
-# load any persisted logs at startup
+
 _load_logs_from_disk()
 
 @app.get("/metadata")
@@ -175,8 +170,7 @@ async def health():
 
 @app.post("/publish")
 async def publish(request: Request):
-    # Producers POST here. If this broker is not the leader for the partition
-    # we return a short response telling the client who the leader is.
+ 
     data = await request.json()
     partition = int(data.get("partition"))
     if partition < 0 or partition >= NUM_PARTITIONS:
@@ -185,27 +179,26 @@ async def publish(request: Request):
     md = await get_metadata()
     leader = md["leaders"][str(partition)]
 
-    # If this broker is not the leader, reply with leader redirect information.
+
     if leader != BASE_URL:
         return {"status": "redirect", "leader": leader}
 
-    # Append to local log
+
     offset = append_message(partition, data)
 
-    # replicate to followers (best-effort; follower will persist on /replicate)
+
     followers = [u for u in md["partitions"][str(partition)] if u != BASE_URL]
     for follower in followers:
         try:
             requests.post(f"{follower}/replicate", json={"partition": partition, "msg": data}, timeout=1.0)
         except Exception as e:
-            # replication best-effort: log and continue
+
             print(f"[broker:{PORT}] replicate to {follower} failed: {e}")
 
     return {"status": "ok", "offset": offset}
 
 @app.post("/replicate")
 async def replicate(request: Request):
-    # Followers receive replicated messages from leader. Persist locally.
     body = await request.json()
     partition = int(body.get("partition"))
     msg = body.get("msg")
